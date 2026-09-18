@@ -252,7 +252,8 @@
         "history": "History",
         "experimental": "Experimental",
         "subtitles": "Subtitles",
-        "voiceCommands": "Voice commands"
+        "voiceCommands": "Voice commands",
+        "wakeListening": "Voice wake & Qwen"
       },
       "experimentalToggle": {
         "label": "Experimental Features",

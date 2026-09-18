@@ -72,6 +72,11 @@ export const AdvancedSettings: React.FC = () => {
         <AppendTrailingSpace descriptionMode="tooltip" grouped={true} />
       </SettingsGroup>
 
+      <SettingsGroup title={t("settings.advanced.groups.wakeListening")}>
+        <WakeListeningSettings descriptionMode="tooltip" grouped={true} />
+        <QwenDeviceSelector descriptionMode="tooltip" grouped={true} />
+      </SettingsGroup>
+
       <SettingsGroup title={t("settings.advanced.groups.voiceCommands")}>
         <CommandMode descriptionMode="tooltip" grouped={true} />
         <Snippets descriptionMode="tooltip" grouped={true} />
@@ -104,8 +109,6 @@ export const AdvancedSettings: React.FC = () => {
             grouped={true}
           />
           <AccelerationSelector descriptionMode="tooltip" grouped={true} />
-          <QwenDeviceSelector descriptionMode="tooltip" grouped={true} />
-          <WakeListeningSettings descriptionMode="tooltip" grouped={true} />
           <LazyStreamClose descriptionMode="tooltip" grouped={true} />
         </SettingsGroup>
       )}

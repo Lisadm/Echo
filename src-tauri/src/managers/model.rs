@@ -27,6 +27,35 @@ pub enum EngineType {
     GigaAM,
     Canary,
     Cohere,
+    Qwen,
+}
+
+/// One pinned file of a multi-file (Hugging Face) model download.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct ModelFileSpec {
+    pub name: String,
+    pub url: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
+/// Build the pinned per-file download spec for a Qwen3-ASR Hugging Face repo.
+/// Revisions and SHA256s are carried over verbatim from OpenWhisper's
+/// `services/local_asr/models.json` so a model update can never silently
+/// change what gets downloaded.
+fn qwen_model_files(repo: &str, revision: &str, files: &[(&str, &str, u64)]) -> Vec<ModelFileSpec> {
+    files
+        .iter()
+        .map(|(name, sha256, size_bytes)| ModelFileSpec {
+            name: name.to_string(),
+            url: format!(
+                "https://huggingface.co/{}/resolve/{}/{}",
+                repo, revision, name
+            ),
+            sha256: sha256.to_string(),
+            size_bytes: *size_bytes,
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -45,11 +74,16 @@ pub struct ModelInfo {
     pub engine_type: EngineType,
     pub accuracy_score: f32,        // 0.0 to 1.0, higher is more accurate
     pub speed_score: f32,           // 0.0 to 1.0, higher is faster
-    pub supports_translation: bool, // Whether the model supports translating to English
+    pub supports_translation: bool, // Whether this model supports translating to English
     pub is_recommended: bool,       // Whether this is the recommended model for new users
     pub supported_languages: Vec<String>, // Languages this model can transcribe
     pub supports_language_selection: bool, // Whether the user can explicitly pick a language
     pub is_custom: bool,            // Whether this is a user-provided custom model
+    /// Multi-file model layout (e.g. Qwen3-ASR from Hugging Face). When
+    /// non-empty, `url`/`sha256` describe nothing; downloads iterate `files`
+    /// into `models_dir/<filename>/` and completion is marked via `installed.json`.
+    #[serde(default)]
+    pub files: Vec<ModelFileSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -149,6 +183,7 @@ impl ModelManager {
                 supported_languages: whisper_languages.clone(),
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -177,6 +212,7 @@ impl ModelManager {
                 supported_languages: whisper_languages.clone(),
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -204,6 +240,7 @@ impl ModelManager {
                 supported_languages: whisper_languages.clone(),
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -231,6 +268,7 @@ impl ModelManager {
                 supported_languages: whisper_languages.clone(),
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -259,6 +297,7 @@ impl ModelManager {
                 supported_languages: whisper_languages,
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -287,6 +326,7 @@ impl ModelManager {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -324,6 +364,7 @@ impl ModelManager {
                 supported_languages: parakeet_v3_languages,
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -351,6 +392,7 @@ impl ModelManager {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -380,6 +422,7 @@ impl ModelManager {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -409,6 +452,7 @@ impl ModelManager {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -438,6 +482,7 @@ impl ModelManager {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -473,6 +518,7 @@ impl ModelManager {
                 supported_languages: sense_voice_languages,
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -503,6 +549,7 @@ impl ModelManager {
                 supported_languages: gigaam_languages,
                 supports_language_selection: false,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -537,6 +584,7 @@ impl ModelManager {
                 supported_languages: canary_flash_languages,
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -574,6 +622,7 @@ impl ModelManager {
                 supported_languages: canary_1b_languages,
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 
@@ -609,6 +658,100 @@ impl ModelManager {
                 supported_languages: cohere_languages,
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
+            },
+        );
+
+        // Qwen3-ASR models (multi-file Hugging Face downloads, pinned to an
+        // exact revision with per-file SHA256, carried over from OpenWhisper).
+        // They require the bundled Python runtime (`qwen-runtime` component)
+        // which is installed automatically before the model files download.
+        let qwen_languages: Vec<String> = vec![
+            "zh", "en", "ja", "ko", "de", "fr", "es", "it", "pt", "nl", "pl", "sv", "da", "no",
+            "fi", "el", "cs", "ro", "hu", "ar", "ru", "tr", "hi", "vi", "id", "th", "ms", "uk",
+            "he",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        available_models.insert(
+            "qwen-0.6b".to_string(),
+            ModelInfo {
+                id: "qwen-0.6b".to_string(),
+                name: "Qwen3-ASR 0.6B".to_string(),
+                description: "Fast multilingual model with excellent Russian/English code-switching. Runs via a bundled Python runtime (~2.8 GB download, ~5.4 GB on disk).".to_string(),
+                filename: "qwen-0.6b".to_string(),
+                url: None,
+                sha256: None,
+                size_mb: 1790,
+                is_downloaded: false,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: true,
+                engine_type: EngineType::Qwen,
+                accuracy_score: 0.80,
+                speed_score: 0.85,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: qwen_languages.clone(),
+                supports_language_selection: true,
+                is_custom: false,
+                files: qwen_model_files(
+                    "Qwen/Qwen3-ASR-0.6B",
+                    "5eb144179a02acc5e5ba31e748d22b0cf3e303b0",
+                    &[
+                        ("chat_template.json", "75a8cfca24f00de72d796fbfed6858fc9614ef3dabd8696684cc3bc03a9c58ff", 1161),
+                        ("config.json", "76d3ae4601ce939830b2517f4a6cadb86cc51316c3900af6b020b051c21a478c", 6193),
+                        ("generation_config.json", "1da527824d81e07118facff437e03f2e24a23311e3bdeb2368973fe77e5f275c", 142),
+                        ("merges.txt", "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", 1671853),
+                        ("model.safetensors", "79d6cbd4c98c7bbffe9db2edac07f56cd6637d0d5944b27f6c2b8353840323ea", 1876091704),
+                        ("preprocessor_config.json", "45e120a4eda2c20c5d7f2ea9354e63536bf35e27aa573fb7cdf78017b378770d", 330),
+                        ("tokenizer_config.json", "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c", 12487),
+                        ("vocab.json", "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", 2776833),
+                    ],
+                ),
+            },
+        );
+
+        available_models.insert(
+            "qwen-1.7b".to_string(),
+            ModelInfo {
+                id: "qwen-1.7b".to_string(),
+                name: "Qwen3-ASR 1.7B".to_string(),
+                description: "Most accurate multilingual model with excellent Russian/English code-switching. Runs via a bundled Python runtime (~2.8 GB download, ~5.4 GB on disk).".to_string(),
+                filename: "qwen-1.7b".to_string(),
+                url: None,
+                sha256: None,
+                size_mb: 4483,
+                is_downloaded: false,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: true,
+                engine_type: EngineType::Qwen,
+                accuracy_score: 0.88,
+                speed_score: 0.70,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: qwen_languages.clone(),
+                supports_language_selection: true,
+                is_custom: false,
+                files: qwen_model_files(
+                    "Qwen/Qwen3-ASR-1.7B",
+                    "7278e1e70fe206f11671096ffdd38061171dd6e5",
+                    &[
+                        ("chat_template.json", "75a8cfca24f00de72d796fbfed6858fc9614ef3dabd8696684cc3bc03a9c58ff", 1161),
+                        ("config.json", "2e74a751548b8ad7d7526d29365ad8144c345d8b412b1152d25dc6698452712f", 6194),
+                        ("generation_config.json", "1da527824d81e07118facff437e03f2e24a23311e3bdeb2368973fe77e5f275c", 142),
+                        ("merges.txt", "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5", 1671853),
+                        ("model-00001-of-00002.safetensors", "a4cd1f1a04d90b757dc7f7dd26254e69a013b19e80efe590a83c6a3bde8608d6", 4220320824),
+                        ("model-00002-of-00002.safetensors", "6e0b9d9e09e2e0238e7ef3cc8a484ab387e91b90f1900bedf88bc92d7929ccfc", 478200688),
+                        ("model.safetensors.index.json", "f994739fe38e5210b9e3e8ce6c6307315e2ceac3cb630e7b7414d69dce520f60", 64821),
+                        ("preprocessor_config.json", "45e120a4eda2c20c5d7f2ea9354e63536bf35e27aa573fb7cdf78017b378770d", 330),
+                        ("tokenizer_config.json", "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c", 12487),
+                        ("vocab.json", "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910", 2776833),
+                    ],
+                ),
             },
         );
 
@@ -726,7 +869,22 @@ impl ModelManager {
         let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
-            if model.is_directory {
+            if !model.files.is_empty() {
+                // Multi-file (Qwen) layout: complete when the final directory
+                // carries the installed.json marker written after every file
+                // verified. A size check on each file is cheap startup insurance.
+                let dir = self.models_dir.join(&model.filename);
+                let marker = dir.join("installed.json");
+                model.is_downloaded = dir.is_dir()
+                    && marker.is_file()
+                    && model.files.iter().all(|f| {
+                        std::fs::metadata(dir.join(&f.name))
+                            .map(|m| m.len() == f.size_bytes)
+                            .unwrap_or(false)
+                    });
+                model.is_downloading = false;
+                model.partial_size = 0;
+            } else if model.is_directory {
                 // For directory-based models, check if the directory exists
                 let model_path = self.models_dir.join(&model.filename);
                 let partial_path = self.models_dir.join(format!("{}.partial", &model.filename));
@@ -930,6 +1088,7 @@ impl ModelManager {
                     supported_languages: vec![],
                     supports_language_selection: true,
                     is_custom: true,
+                    files: Vec::new(),
                 },
             );
         }
@@ -995,6 +1154,12 @@ impl ModelManager {
 
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
+
+        // Multi-file (Hugging Face) models — e.g. Qwen3-ASR — use the per-file
+        // downloader instead of the single-archive flow below.
+        if !model_info.files.is_empty() {
+            return self.download_model_files(model_id, &model_info).await;
+        }
 
         let url = model_info
             .url
@@ -1327,9 +1492,243 @@ impl ModelManager {
         Ok(())
     }
 
+    /// Multi-file (Hugging Face) download for Qwen models: per-file resume,
+    /// per-file SHA256 verification, staged directory, atomic swap, and an
+    /// `installed.json` marker that `update_download_status` keys off.
+    async fn download_model_files(&self, model_id: &str, info: &ModelInfo) -> Result<()> {
+        let final_dir = self.models_dir.join(&info.filename);
+        let staging = self.models_dir.join(format!("{}.staging", &info.filename));
+        let parts = self.models_dir.join(format!("{}.parts", &info.filename));
+
+        if final_dir.is_dir() && final_dir.join("installed.json").is_file() {
+            let _ = fs::remove_dir_all(&staging);
+            let _ = fs::remove_dir_all(&parts);
+            self.update_download_status()?;
+            return Ok(());
+        }
+
+        // Mark as downloading + cancel flag + cleanup guard (same as the
+        // single-archive flow).
+        {
+            let mut models = self.available_models.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                model.is_downloading = true;
+            }
+        }
+        let cancel_flag = Arc::new(AtomicBool::new(false));
+        {
+            let mut flags = self.cancel_flags.lock().unwrap();
+            flags.insert(model_id.to_string(), cancel_flag.clone());
+        }
+        let mut cleanup = DownloadCleanup {
+            available_models: &self.available_models,
+            cancel_flags: &self.cancel_flags,
+            model_id: model_id.to_string(),
+            disarmed: false,
+        };
+
+        fs::create_dir_all(&staging)?;
+        fs::create_dir_all(&parts)?;
+
+        let total: u64 = info.files.iter().map(|f| f.size_bytes).sum();
+        let mut completed: u64 = 0;
+        let client = reqwest::Client::new();
+
+        for file in &info.files {
+            let part_path = parts.join(format!("{}.part", file.name));
+            let finished = self
+                .download_file_verified(
+                    &client,
+                    model_id,
+                    &file.url,
+                    &part_path,
+                    file.size_bytes,
+                    &file.sha256,
+                    cancel_flag.clone(),
+                    completed,
+                    total,
+                )
+                .await?;
+            if !finished {
+                // Cancelled: keep parts + staging for resume on retry.
+                info!("Download cancelled for: {}", model_id);
+                return Ok(());
+            }
+            fs::rename(&part_path, staging.join(&file.name))?;
+            completed += file.size_bytes;
+            let _ = self.app_handle.emit(
+                "model-download-progress",
+                &DownloadProgress {
+                    model_id: model_id.to_string(),
+                    downloaded: completed,
+                    total,
+                    percentage: if total > 0 {
+                        (completed as f64 / total as f64) * 100.0
+                    } else {
+                        0.0
+                    },
+                },
+            );
+        }
+
+        // Marker first inside staging, then swap the directory into place.
+        fs::write(
+            staging.join("installed.json"),
+            serde_json::to_string_pretty(&info.files)?,
+        )?;
+        if final_dir.exists() {
+            fs::remove_dir_all(&final_dir)?;
+        }
+        fs::rename(&staging, &final_dir)?;
+        let _ = fs::remove_dir_all(&parts);
+
+        cleanup.disarmed = true;
+        {
+            let mut models = self.available_models.lock().unwrap();
+            if let Some(model) = models.get_mut(model_id) {
+                model.is_downloading = false;
+                model.is_downloaded = true;
+                model.partial_size = 0;
+            }
+        }
+        self.cancel_flags.lock().unwrap().remove(model_id);
+        let _ = self.app_handle.emit("model-download-complete", model_id);
+        info!(
+            "Successfully downloaded multi-file model {} to {:?}",
+            model_id, final_dir
+        );
+        Ok(())
+    }
+
+    /// Download one pinned file with Range resume into `part_path`, verify its
+    /// size and SHA256, emitting aggregate progress for `model_id`. Returns
+    /// `Ok(false)` if the download was cancelled (parts are kept for resume).
+    #[allow(clippy::too_many_arguments)]
+    async fn download_file_verified(
+        &self,
+        client: &reqwest::Client,
+        model_id: &str,
+        url: &str,
+        part_path: &Path,
+        expected_size: u64,
+        expected_sha256: &str,
+        cancel_flag: Arc<AtomicBool>,
+        done_before: u64,
+        total: u64,
+    ) -> Result<bool> {
+        let mut resume_from = if part_path.exists() {
+            part_path.metadata()?.len()
+        } else {
+            0
+        };
+
+        let mut request = client.get(url);
+        if resume_from > 0 {
+            request = request.header("Range", format!("bytes={}-", resume_from));
+        }
+        let mut response = request.send().await?;
+
+        if resume_from > 0 && response.status() == reqwest::StatusCode::OK {
+            // Server ignored the Range header — restart cleanly.
+            let _ = fs::remove_file(part_path);
+            resume_from = 0;
+            response = client.get(url).send().await?;
+        }
+        if !response.status().is_success()
+            && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+        {
+            return Err(anyhow::anyhow!(
+                "Failed to download {}: HTTP {}",
+                url,
+                response.status()
+            ));
+        }
+
+        let content_length = response.content_length().unwrap_or(0);
+        let file_total = if resume_from > 0 {
+            resume_from + content_length
+        } else {
+            content_length
+        };
+        if file_total > 0 && expected_size > 0 && file_total != expected_size {
+            return Err(anyhow::anyhow!(
+                "Download size mismatch for {}: expected {} bytes, server reports {}",
+                url,
+                expected_size,
+                file_total
+            ));
+        }
+
+        let mut file = if resume_from > 0 {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(part_path)?
+        } else {
+            fs::File::create(part_path)?
+        };
+
+        let mut downloaded = resume_from;
+        let mut last_emit = Instant::now();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return Ok(false);
+            }
+            let chunk = chunk?;
+            file.write_all(&chunk)?;
+            downloaded += chunk.len() as u64;
+
+            if last_emit.elapsed() >= Duration::from_millis(100) {
+                last_emit = Instant::now();
+                let done = done_before + downloaded;
+                let _ = self.app_handle.emit(
+                    "model-download-progress",
+                    &DownloadProgress {
+                        model_id: model_id.to_string(),
+                        downloaded: done,
+                        total,
+                        percentage: if total > 0 {
+                            (done as f64 / total as f64) * 100.0
+                        } else {
+                            0.0
+                        },
+                    },
+                );
+            }
+        }
+        file.flush()?;
+        drop(file);
+
+        let actual = part_path.metadata()?.len();
+        if expected_size > 0 && actual != expected_size {
+            let _ = fs::remove_file(part_path);
+            return Err(anyhow::anyhow!(
+                "Download incomplete for {}: expected {} bytes, got {}",
+                url,
+                expected_size,
+                actual
+            ));
+        }
+
+        let _ = self.app_handle.emit("model-verification-started", model_id);
+        let verify_path = part_path.to_path_buf();
+        let expected = expected_sha256.to_string();
+        let verify_model_id = model_id.to_string();
+        let verify_result = tokio::task::spawn_blocking(move || {
+            Self::verify_sha256(&verify_path, Some(&expected), &verify_model_id)
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("SHA256 task panicked: {}", e))?;
+        verify_result?;
+        let _ = self
+            .app_handle
+            .emit("model-verification-completed", model_id);
+        Ok(true)
+    }
+
     pub fn delete_model(&self, model_id: &str) -> Result<()> {
         debug!("ModelManager: delete_model called for: {}", model_id);
-
         let model_info = {
             let models = self.available_models.lock().unwrap();
             models.get(model_id).cloned()
@@ -1355,6 +1754,21 @@ impl ModelManager {
                 info!("Deleting model directory at: {:?}", model_path);
                 fs::remove_dir_all(&model_path)?;
                 info!("Model directory deleted successfully");
+                deleted_something = true;
+            }
+            // Multi-file leftovers (staging dir + per-file resume parts)
+            let staging = self
+                .models_dir
+                .join(format!("{}.staging", &model_info.filename));
+            let parts = self
+                .models_dir
+                .join(format!("{}.parts", &model_info.filename));
+            if staging.exists() {
+                let _ = fs::remove_dir_all(&staging);
+                deleted_something = true;
+            }
+            if parts.exists() {
+                let _ = fs::remove_dir_all(&parts);
                 deleted_something = true;
             }
         } else {
@@ -1568,6 +1982,7 @@ mod tests {
                 supported_languages: vec!["en".to_string()],
                 supports_language_selection: true,
                 is_custom: false,
+                files: Vec::new(),
             },
         );
 

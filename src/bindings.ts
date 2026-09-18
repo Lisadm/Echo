@@ -747,6 +747,60 @@ async isModelLoading() : Promise<Result<boolean, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getQwenRuntimeStatus() : Promise<QwenRuntimeStatus> {
+    return await TAURI_INVOKE("get_qwen_runtime_status");
+},
+async downloadQwenRuntime() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_qwen_runtime") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async cancelQwenRuntimeDownload() : Promise<void> {
+    await TAURI_INVOKE("cancel_qwen_runtime_download");
+},
+async changeQwenDeviceSetting(newSetting: QwenDeviceSetting) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_qwen_device_setting", { newSetting }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeInputModeSetting(newMode: InputMode) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_input_mode_setting", { newMode }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeWakePhraseSetting(phrase: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_wake_phrase_setting", { phrase }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeWakeAlternativePhrasesSetting(phrases: string[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_wake_alternative_phrases_setting", { phrases }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async changeWakeActivationTimeoutSetting(seconds: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("change_wake_activation_timeout_setting", { seconds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async hasAnyModelsAvailable() : Promise<Result<boolean, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("has_any_models_available") };
@@ -1074,7 +1128,7 @@ historyUpdatePayload: "history-update-payload"
 
 /** user-defined types **/
 
-export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; agent_bridge_enabled?: boolean; agent_bridge_port?: number; tts_enabled?: boolean; tts_voice_id?: string | null; tts_rate?: number; assistant_enabled?: boolean; assistant_system_prompt?: string; tutor_enabled?: boolean; custom_words?: string[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; translate_enabled?: boolean; translate_target?: Lang; translate_model?: string; translate_base_url?: string; mute_while_recording?: boolean; append_trailing_space?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; capture_folder?: string; capture_trigger_phrases?: string; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; extra_recording_buffer_ms?: number; auto_punctuate?: boolean; auto_capitalize?: boolean; subtitle_overlay?: boolean; subtitle_font_size?: SubtitleFontSize; subtitle_max_chars?: number; subtitle_refresh_ms?: number; command_mode_enabled?: boolean; coach_toast_enabled?: boolean; snippets?: Snippet[]; self_correction_enabled?: boolean; spoken_lists_enabled?: boolean; dev_dictionary_enabled?: boolean }
+export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; clamshell_microphone?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; agent_bridge_enabled?: boolean; agent_bridge_port?: number; tts_enabled?: boolean; tts_voice_id?: string | null; tts_rate?: number; custom_words?: string[]; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: SecretMap; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; translate_enabled?: boolean; translate_target?: Lang; translate_model?: string; translate_base_url?: string; mute_while_recording?: boolean; append_trailing_space?: boolean; app_language?: string; experimental_enabled?: boolean; lazy_stream_close?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; capture_folder?: string; capture_trigger_phrases?: string; custom_filler_words?: string[] | null; whisper_accelerator?: WhisperAcceleratorSetting; ort_accelerator?: OrtAcceleratorSetting; whisper_gpu_device?: number; qwen_device?: QwenDeviceSetting; input_mode?: InputMode; wake_phrase?: string; wake_alternative_phrases?: string[]; wake_activation_timeout_secs?: number; wake_max_utterance_secs?: number; extra_recording_buffer_ms?: number; auto_punctuate?: boolean; auto_capitalize?: boolean; subtitle_overlay?: boolean; subtitle_font_size?: SubtitleFontSize; subtitle_max_chars?: number; subtitle_refresh_ms?: number; command_mode_enabled?: boolean; coach_toast_enabled?: boolean; snippets?: Snippet[]; self_correction_enabled?: boolean; spoken_lists_enabled?: boolean; dev_dictionary_enabled?: boolean; assistant_enabled?: boolean; assistant_system_prompt?: string; tutor_enabled?: boolean }
 export type AudioDevice = { index: string; name: string; is_default: boolean }
 export type AutoSubmitKey = "enter" | "ctrl_enter" | "cmd_enter"
 export type AvailableAccelerators = { whisper: string[]; ort: string[]; gpu_devices: GpuDeviceOption[] }
@@ -1083,7 +1137,7 @@ export type BindingResponse = { success: boolean; binding: ShortcutBinding | nul
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
 export type CoachDashboard = { summary: PeriodSummary; trend: TrendPoint[]; current_streak: number; best_streak: number }
 export type CustomSounds = { start: boolean; stop: boolean }
-export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GigaAM" | "Canary" | "Cohere"
+export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GigaAM" | "Canary" | "Cohere" | "Qwen"
 export type GpuDeviceOption = { id: number; name: string; total_vram_mb: number }
 export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_requested: boolean; duration_ms: number | null; coach_metrics: string | null }
 export type HistoryUpdatePayload = { action: "added"; entry: HistoryEntry } | { action: "updated"; entry: HistoryEntry } | { action: "deleted"; id: number } | { action: "toggled"; id: number }
@@ -1095,11 +1149,38 @@ export type ImplementationChangeResult = { success: boolean;
  * List of binding IDs that were reset to defaults due to incompatibility
  */
 reset_bindings: string[] }
+/**
+ * How dictation and wake-word listening share the microphone.
+ */
+export type InputMode = 
+/**
+ * Classic Echo: hotkey starts/stops a recording.
+ */
+"normal_dictation" | 
+/**
+ * Always listening after launch: Silero VAD gates capture, an utterance
+ * must start with the wake phrase to be executed.
+ */
+"wake_always_listening" | 
+/**
+ * Hotkey toggles wake listening on/off (ARMED ↔ OFF).
+ */
+"wake_hotkey_toggle"
 export type KeyboardImplementation = "tauri" | "handy_keys"
 export type LLMPrompt = { id: string; name: string; prompt: string }
 export type Lang = "Chinese" | "English" | "French" | "Portuguese" | "Spanish" | "Japanese" | "Turkish" | "Russian" | "Arabic" | "Korean" | "Thai" | "Italian" | "German" | "Vietnamese" | "Malay" | "Indonesian" | "Filipino" | "Hindi" | "TraditionalChinese" | "Polish" | "Czech" | "Dutch" | "Khmer" | "Burmese" | "Persian" | "Gujarati" | "Urdu" | "Telugu" | "Marathi" | "Hebrew" | "Bengali" | "Tamil" | "Ukrainian" | "Tibetan" | "Kazakh" | "Mongolian" | "Uyghur" | "Cantonese"
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error"
-export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; sha256: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number; supports_translation: boolean; is_recommended: boolean; supported_languages: string[]; supports_language_selection: boolean; is_custom: boolean }
+/**
+ * One pinned file of a multi-file (Hugging Face) model download.
+ */
+export type ModelFileSpec = { name: string; url: string; sha256: string; size_bytes: number }
+export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; sha256: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number; supports_translation: boolean; is_recommended: boolean; supported_languages: string[]; supports_language_selection: boolean; is_custom: boolean; 
+/**
+ * Multi-file model layout (e.g. Qwen3-ASR from Hugging Face). When
+ * non-empty, `url`/`sha256` describe nothing; downloads iterate `files`
+ * into `models_dir/<filename>/` and completion is marked via `installed.json`.
+ */
+files?: ModelFileSpec[] }
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_15"
 export type OrtAcceleratorSetting = "auto" | "cpu" | "cuda" | "directml" | "rocm"
@@ -1117,7 +1198,14 @@ export type PostProcessProvider = { id: string; label: string; base_url: string;
  */
 export type QuestionEvent = { id: number; kind: string; question: string; options: string[]; timeout_s: number; speak: boolean; source: string }
 export type QuestionRow = { id: number; source: string; kind: string; question: string; options: string | null; answer: string | null; status: string; asked_at: number; answered_at: number | null }
+/**
+ * Compute device for the Qwen3-ASR sidecar. `Auto` picks CUDA when an NVIDIA
+ * GPU with a working driver is present, otherwise CPU.
+ */
+export type QwenDeviceSetting = "auto" | "cuda" | "cpu"
+export type QwenRuntimeStatus = { installed: boolean; version: string | null; installing: boolean; downloaded_bytes: number; total_bytes: number }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
+export type ScoreReport = { overall: number; words: WordScore[]; reference_word_count: number; matched_word_count: number; note: string }
 export type SecretMap = Partial<{ [key in string]: string }>
 export type ShortcutBinding = { id: string; name: string; description: string; default_binding: string; current_binding: string }
 /**
@@ -1134,10 +1222,9 @@ export type TrendPoint = { day: number; avg_wpm: number; avg_filler_rate: number
 export type TrendWindow = "Days7" | "Days30" | "All"
 export type TypingTool = "auto" | "wtype" | "kwtype" | "dotool" | "ydotool" | "xdotool"
 export type VoiceInfo = { id: string; display_name: string; language: string }
-export type WordScore = { reference: string; spoken: string | null; matched: boolean }
-export type ScoreReport = { overall: number; words: WordScore[]; reference_word_count: number; matched_word_count: number; note: string }
 export type WhisperAcceleratorSetting = "auto" | "cpu" | "gpu"
 export type WindowsMicrophonePermissionStatus = { supported: boolean; overall_access: PermissionAccess; device_access: PermissionAccess; app_access: PermissionAccess; desktop_app_access: PermissionAccess }
+export type WordScore = { reference: string; spoken: string | null; matched: boolean }
 
 /** tauri-specta globals **/
 

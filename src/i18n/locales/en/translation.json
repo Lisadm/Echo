@@ -419,6 +419,31 @@
         "add": "Add",
         "duplicate": "Snippet \"{{trigger}}\" already exists",
         "remove": "Remove snippet {{trigger}}"
+      },
+      "qwen": {
+        "title": "Qwen (ASR) device",
+        "description": "Compute device for Qwen3-ASR models. Auto selects CUDA when an NVIDIA GPU is present. Requires reloading the model.",
+        "deviceOptions": {
+          "auto": "Auto (CUDA if available)",
+          "cuda": "CUDA",
+          "cpu": "CPU"
+        }
+      },
+      "wakeListening": {
+        "title": "Wake listening",
+        "description": "Say the wake phrase, then your command. The utterance must START with the phrase unless the wake word is spoken alone right before.",
+        "inputMode": "Input mode",
+        "modes": {
+          "normal_dictation": "Normal dictation",
+          "wake_always_listening": "Wake word — always listening",
+          "wake_hotkey_toggle": "Wake word — hotkey toggle"
+        },
+        "wakePhrase": "Wake phrase",
+        "alternatives": "Alternative phrases (comma-separated)",
+        "timeout": "Command window after wake word (seconds)",
+        "wakePhraseDescription": "The word that arms the assistant.",
+        "alternativesDescription": "Extra spellings the ASR may produce for the same word.",
+        "timeoutDescription": "How long a spoken command is accepted after a bare wake word."
       }
     },
     "postProcessing": {
@@ -778,7 +803,10 @@
     "transcribing": "Transcribing...",
     "processing": "Processing...",
     "cancel": "Cancel recording",
-    "preparing": "Preparing…"
+    "preparing": "Preparing…",
+    "wakeArmed": "Listening for wake phrase…",
+    "wakeListening": "Listening…",
+    "wakeActivated": "Speak your command…"
   },
   "agentPanel": {
     "from": "Question from {{source}}",

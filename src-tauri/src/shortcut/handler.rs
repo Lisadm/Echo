@@ -9,7 +9,8 @@ use tauri::{AppHandle, Manager};
 
 use crate::actions::ACTION_MAP;
 use crate::managers::audio::AudioRecordingManager;
-use crate::settings::get_settings;
+use crate::managers::wake::WakeManager;
+use crate::settings::{get_settings, InputMode};
 use crate::transcription_coordinator::is_transcribe_binding;
 use crate::TranscriptionCoordinator;
 
@@ -36,6 +37,19 @@ pub fn handle_shortcut_event(
 
     // Transcribe bindings are handled by the coordinator.
     if is_transcribe_binding(binding_id) {
+        // In wake-listening modes the transcribe hotkey toggles the wake
+        // state machine instead of starting a dictation (plan step 6). Only
+        // key *press* matters — releases must not toggle twice.
+        if settings.input_mode != InputMode::NormalDictation {
+            if is_pressed {
+                if let Some(wake) = app.try_state::<Arc<WakeManager>>() {
+                    wake.toggle();
+                } else {
+                    warn!("WakeManager is not initialized");
+                }
+            }
+            return;
+        }
         if let Some(coordinator) = app.try_state::<TranscriptionCoordinator>() {
             coordinator.send_input(binding_id, hotkey_string, is_pressed, settings.push_to_talk);
         } else {

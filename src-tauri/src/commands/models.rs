@@ -26,8 +26,45 @@ pub async fn get_model_info(
 pub async fn download_model(
     app_handle: AppHandle,
     model_manager: State<'_, Arc<ModelManager>>,
+    qwen_runtime: State<'_, Arc<crate::managers::qwen_runtime::QwenRuntimeManager>>,
     model_id: String,
 ) -> Result<(), String> {
+    // Qwen models need the bundled Python runtime first. Install it ahead of
+    // the model files and surface its progress on this model's download
+    // events so the existing model card shows the (large) first phase.
+    let info = model_manager.get_model_info(&model_id);
+    if matches!(
+        info.as_ref().map(|i| &i.engine_type),
+        Some(crate::managers::model::EngineType::Qwen)
+    ) && !qwen_runtime.is_installed()
+    {
+        let runtime_result = qwen_runtime
+            .install_with_progress(|downloaded, total| {
+                let _ = app_handle.emit(
+                    "model-download-progress",
+                    &crate::managers::model::DownloadProgress {
+                        model_id: model_id.clone(),
+                        downloaded,
+                        total,
+                        percentage: if total > 0 {
+                            (downloaded as f64 / total as f64) * 100.0
+                        } else {
+                            0.0
+                        },
+                    },
+                );
+            })
+            .await
+            .map_err(|e| format!("Qwen runtime install failed: {}", e));
+        if let Err(ref error) = runtime_result {
+            let _ = app_handle.emit(
+                "model-download-failed",
+                serde_json::json!({ "model_id": &model_id, "error": error }),
+            );
+            return Err(error.clone());
+        }
+    }
+
     let result = model_manager
         .download_model(&model_id)
         .await

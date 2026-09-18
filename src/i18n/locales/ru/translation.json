@@ -419,6 +419,31 @@
         "add": "Добавить",
         "duplicate": "Сниппет «{{trigger}}» уже существует",
         "remove": "Удалить сниппет {{trigger}}"
+      },
+      "qwen": {
+        "title": "Устройство для Qwen (ASR)",
+        "description": "Вычислительное устройство для моделей Qwen3-ASR. «Авто» выбирает CUDA при наличии NVIDIA GPU. Требует перезагрузки модели.",
+        "deviceOptions": {
+          "auto": "Авто (CUDA, если доступна)",
+          "cuda": "CUDA",
+          "cpu": "CPU"
+        }
+      },
+      "wakeListening": {
+        "title": "Активация голосом",
+        "description": "Скажите фразу активации, затем команду. Фраза должна быть В НАЧАЛЕ высказывания — либо отдельно, сразу перед командой.",
+        "inputMode": "Режим ввода",
+        "modes": {
+          "normal_dictation": "Обычная диктовка",
+          "wake_always_listening": "Wake word — постоянное слушание",
+          "wake_hotkey_toggle": "Wake word — переключение хоткеем"
+        },
+        "wakePhrase": "Фраза активации",
+        "alternatives": "Альтернативные фразы (через запятую)",
+        "timeout": "Окно команды после wake word (секунды)",
+        "wakePhraseDescription": "Слово, которое активирует ассистента.",
+        "alternativesDescription": "Дополнительные варианты распознавания того же слова.",
+        "timeoutDescription": "Сколько секунд после отдельного wake word принимается команда."
       }
     },
     "postProcessing": {
@@ -778,7 +803,10 @@
     "transcribing": "Расшифровка...",
     "processing": "Обработка...",
     "cancel": "Отменить запись",
-    "preparing": "Подготовка…"
+    "preparing": "Подготовка…",
+    "wakeArmed": "Слушаю фразу активации…",
+    "wakeListening": "Слушаю…",
+    "wakeActivated": "Говорите команду…"
   },
   "agentPanel": {
     "from": "Вопрос от {{source}}",

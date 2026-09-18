@@ -3,7 +3,7 @@ use crate::helpers::clamshell;
 use crate::settings::{get_settings, AppSettings};
 use crate::utils;
 use log::{debug, error, info};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
@@ -153,6 +153,8 @@ pub struct AudioRecordingManager {
     is_recording: Arc<Mutex<bool>>,
     did_mute: Arc<Mutex<bool>>,
     close_generation: Arc<AtomicU64>,
+    /// Wake listening is consuming the (open) microphone stream.
+    wake_active: Arc<AtomicBool>,
 }
 
 impl AudioRecordingManager {
@@ -176,6 +178,7 @@ impl AudioRecordingManager {
             is_recording: Arc::new(Mutex::new(false)),
             did_mute: Arc::new(Mutex::new(false)),
             close_generation: Arc::new(AtomicU64::new(0)),
+            wake_active: Arc::new(AtomicBool::new(false)),
         };
 
         // Always-on?  Open immediately.
@@ -227,6 +230,7 @@ impl AudioRecordingManager {
             let state = rm.state.lock().unwrap();
             if rm.close_generation.load(Ordering::SeqCst) == gen
                 && matches!(*state, RecordingState::Idle)
+                && !rm.wake_active.load(Ordering::SeqCst)
             {
                 // stop_microphone_stream does not acquire the state lock,
                 // so holding it here is safe (no deadlock).
@@ -356,6 +360,40 @@ impl AudioRecordingManager {
 
         *open_flag = false;
         debug!("Microphone stream stopped");
+    }
+
+    /* ---------- wake listening --------------------------------------------- */
+
+    /// Attach/detach the wake-listening VAD consumer. While attached the
+    /// microphone stream is kept open even when idle (plan step 11: the mic
+    /// stays open while ARMED, closed again when wake listening turns off).
+    pub fn set_wake_listener(
+        &self,
+        tx: Option<std::sync::mpsc::Sender<crate::audio_toolkit::WakeAudioFrame>>,
+    ) -> Result<(), String> {
+        if tx.is_some() {
+            self.wake_active.store(true, Ordering::SeqCst);
+            if !*self.is_open.lock().unwrap() {
+                self.start_microphone_stream().map_err(|e| e.to_string())?;
+            }
+        } else {
+            self.wake_active.store(false, Ordering::SeqCst);
+        }
+
+        let recorder = self.recorder.lock().unwrap();
+        match recorder.as_ref() {
+            Some(rec) => {
+                rec.set_wake_listener(tx);
+                Ok(())
+            }
+            None => {
+                if self.wake_active.load(Ordering::SeqCst) {
+                    self.wake_active.store(false, Ordering::SeqCst);
+                    return Err("Microphone recorder is not initialized".to_string());
+                }
+                Ok(())
+            }
+        }
     }
 
     /* ---------- mode switching --------------------------------------------- */

@@ -324,6 +324,41 @@ impl Default for OrtAcceleratorSetting {
     }
 }
 
+/// Compute device for the Qwen3-ASR sidecar. `Auto` picks CUDA when an NVIDIA
+/// GPU with a working driver is present, otherwise CPU.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum QwenDeviceSetting {
+    Auto,
+    Cuda,
+    Cpu,
+}
+
+impl Default for QwenDeviceSetting {
+    fn default() -> Self {
+        QwenDeviceSetting::Auto
+    }
+}
+
+/// How dictation and wake-word listening share the microphone.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum InputMode {
+    /// Classic Echo: hotkey starts/stops a recording.
+    NormalDictation,
+    /// Always listening after launch: Silero VAD gates capture, an utterance
+    /// must start with the wake phrase to be executed.
+    WakeAlwaysListening,
+    /// Hotkey toggles wake listening on/off (ARMED ↔ OFF).
+    WakeHotkeyToggle,
+}
+
+impl Default for InputMode {
+    fn default() -> Self {
+        InputMode::NormalDictation
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Type)]
 #[serde(transparent)]
 pub(crate) struct SecretMap(HashMap<String, String>);
@@ -469,6 +504,18 @@ pub struct AppSettings {
     pub ort_accelerator: OrtAcceleratorSetting,
     #[serde(default = "default_whisper_gpu_device")]
     pub whisper_gpu_device: i32,
+    #[serde(default)]
+    pub qwen_device: QwenDeviceSetting,
+    #[serde(default)]
+    pub input_mode: InputMode,
+    #[serde(default = "default_wake_phrase")]
+    pub wake_phrase: String,
+    #[serde(default = "default_wake_alternative_phrases")]
+    pub wake_alternative_phrases: Vec<String>,
+    #[serde(default = "default_wake_activation_timeout_secs")]
+    pub wake_activation_timeout_secs: u64,
+    #[serde(default = "default_wake_max_utterance_secs")]
+    pub wake_max_utterance_secs: u64,
     #[serde(default)]
     pub extra_recording_buffer_ms: u64,
     #[serde(default = "default_auto_punctuate")]
@@ -809,6 +856,22 @@ fn default_whisper_gpu_device() -> i32 {
     -1 // auto
 }
 
+pub fn default_wake_phrase() -> String {
+    "эхо".to_string()
+}
+
+pub fn default_wake_alternative_phrases() -> Vec<String> {
+    vec!["эко".to_string(), "эй эхо".to_string()]
+}
+
+pub fn default_wake_activation_timeout_secs() -> u64 {
+    7
+}
+
+pub fn default_wake_max_utterance_secs() -> u64 {
+    30
+}
+
 fn default_typing_tool() -> TypingTool {
     TypingTool::Auto
 }
@@ -1002,6 +1065,12 @@ pub fn get_default_settings() -> AppSettings {
         whisper_accelerator: WhisperAcceleratorSetting::default(),
         ort_accelerator: OrtAcceleratorSetting::default(),
         whisper_gpu_device: default_whisper_gpu_device(),
+        qwen_device: QwenDeviceSetting::default(),
+        input_mode: InputMode::default(),
+        wake_phrase: default_wake_phrase(),
+        wake_alternative_phrases: default_wake_alternative_phrases(),
+        wake_activation_timeout_secs: default_wake_activation_timeout_secs(),
+        wake_max_utterance_secs: default_wake_max_utterance_secs(),
         extra_recording_buffer_ms: 0,
         auto_punctuate: default_auto_punctuate(),
         auto_capitalize: default_auto_capitalize(),

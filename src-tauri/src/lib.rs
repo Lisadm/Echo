@@ -32,6 +32,7 @@ mod tts;
 mod tutor;
 mod utils;
 mod voice_commands;
+mod wake;
 
 pub use cli::CliArgs;
 #[cfg(debug_assertions)]
@@ -42,7 +43,9 @@ use env_filter::Builder as EnvFilterBuilder;
 use managers::audio::AudioRecordingManager;
 use managers::history::HistoryManager;
 use managers::model::ModelManager;
+use managers::qwen_runtime::QwenRuntimeManager;
 use managers::transcription::TranscriptionManager;
+use managers::wake::WakeManager;
 #[cfg(unix)]
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
 #[cfg(unix)]
@@ -244,6 +247,18 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
     app_handle.manage(tts_manager.clone());
+    app_handle.manage(Arc::new(
+        QwenRuntimeManager::new(app_handle).expect("Failed to initialize Qwen runtime manager"),
+    ));
+    let wake_manager = Arc::new(WakeManager::new(app_handle.clone()));
+    app_handle.manage(wake_manager.clone());
+    // "Always listening" mode arms wake listening at app start (plan step 11).
+    if matches!(
+        crate::settings::get_settings(app_handle).input_mode,
+        crate::settings::InputMode::WakeAlwaysListening
+    ) {
+        wake_manager.set_on(true);
+    }
 
     // Note: Shortcuts are NOT initialized here.
     // The frontend is responsible for calling the `initialize_shortcuts` command
@@ -518,6 +533,14 @@ pub fn run(cli_args: CliArgs) {
             commands::models::get_current_model,
             commands::models::get_transcription_model_status,
             commands::models::is_model_loading,
+            commands::qwen::get_qwen_runtime_status,
+            commands::qwen::download_qwen_runtime,
+            commands::qwen::cancel_qwen_runtime_download,
+            commands::qwen::change_qwen_device_setting,
+            commands::wake::change_input_mode_setting,
+            commands::wake::change_wake_phrase_setting,
+            commands::wake::change_wake_alternative_phrases_setting,
+            commands::wake::change_wake_activation_timeout_setting,
             commands::models::has_any_models_available,
             commands::models::has_any_models_or_downloads,
             commands::audio::update_microphone_mode,

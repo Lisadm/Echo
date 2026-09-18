@@ -21,6 +21,8 @@ import { ExperimentalToggle } from "./ExperimentalToggle";
 import { useSettings } from "../../../hooks/useSettings";
 import { KeyboardImplementationSelector } from "../debug/KeyboardImplementationSelector";
 import { AccelerationSelector } from "./AccelerationSelector";
+import { QwenDeviceSelector } from "./QwenDeviceSelector";
+import { WakeListeningSettings } from "./WakeListening";
 import { LazyStreamClose } from "./LazyStreamClose";
 import { SubtitleOverlayToggle } from "./SubtitleOverlayToggle";
 import { SubtitleFontSizeSetting } from "./SubtitleFontSize";
@@ -102,6 +104,8 @@ export const AdvancedSettings: React.FC = () => {
             grouped={true}
           />
           <AccelerationSelector descriptionMode="tooltip" grouped={true} />
+          <QwenDeviceSelector descriptionMode="tooltip" grouped={true} />
+          <WakeListeningSettings descriptionMode="tooltip" grouped={true} />
           <LazyStreamClose descriptionMode="tooltip" grouped={true} />
         </SettingsGroup>
       )}

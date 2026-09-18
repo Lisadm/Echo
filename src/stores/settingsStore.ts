@@ -9,6 +9,8 @@ import type {
   SubtitleFontSize,
   Snippet,
   Lang,
+  QwenDeviceSetting,
+  InputMode,
 } from "@/bindings";
 import { commands } from "@/bindings";
 
@@ -164,6 +166,14 @@ const settingUpdaters: {
     commands.changeOrtAcceleratorSetting(value as OrtAcceleratorSetting),
   whisper_gpu_device: (value) =>
     commands.changeWhisperGpuDevice(value as number),
+  qwen_device: (value) =>
+    commands.changeQwenDeviceSetting(value as QwenDeviceSetting),
+  input_mode: (value) => commands.changeInputModeSetting(value as InputMode),
+  wake_phrase: (value) => commands.changeWakePhraseSetting(value as string),
+  wake_alternative_phrases: (value) =>
+    commands.changeWakeAlternativePhrasesSetting(value as string[]),
+  wake_activation_timeout_secs: (value) =>
+    commands.changeWakeActivationTimeoutSetting(value as number),
   extra_recording_buffer_ms: (value) =>
     commands.changeExtraRecordingBufferSetting(value as number),
   auto_punctuate: (value) =>

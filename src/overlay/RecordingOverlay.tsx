@@ -6,7 +6,16 @@ import { commands } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 
-type OverlayState = "preparing" | "recording" | "transcribing" | "processing";
+type OverlayState =
+  | "preparing"
+  | "recording"
+  | "transcribing"
+  | "processing"
+  // Wake listening (plan step 13): the user must always see whether the mic
+  // is armed, hearing speech, or waiting for the follow-up command.
+  | "armed"
+  | "wake-listening"
+  | "wake-activated";
 
 const SUBTITLE_FONT_PX: Record<string, number> = {
   small: 14,
@@ -100,7 +109,13 @@ const RecordingOverlay: React.FC = () => {
       ? t("overlay.transcribing")
       : state === "processing"
         ? t("overlay.processing")
-        : "";
+        : state === "armed"
+          ? t("overlay.wakeArmed")
+          : state === "wake-listening"
+            ? t("overlay.wakeListening")
+            : state === "wake-activated"
+              ? t("overlay.wakeActivated")
+              : "";
 
   return (
     <div className="overlay-container">

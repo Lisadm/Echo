@@ -1,8 +1,11 @@
 use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelManager};
+use crate::managers::qwen_runtime;
+use crate::managers::qwen_sidecar::QwenSidecar;
 use crate::settings::{
-    get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, WhisperAcceleratorSetting,
+    get_settings, ModelUnloadTimeout, OrtAcceleratorSetting, QwenDeviceSetting,
+    WhisperAcceleratorSetting,
 };
 use crate::transcript_format::{SpeakerTurn, TimedSegment};
 use anyhow::Result;
@@ -10,6 +13,7 @@ use log::{debug, error, info, warn};
 use serde::Serialize;
 use specta::Type;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::thread;
@@ -64,6 +68,7 @@ enum LoadedEngine {
     GigaAM(GigaAMModel),
     Canary(CanaryModel),
     Cohere(CohereModel),
+    Qwen(QwenSidecar),
 }
 
 /// RAII guard that clears the `is_loading` flag and notifies waiters on drop.
@@ -141,6 +146,17 @@ impl TranscriptionManager {
                         .try_state::<Arc<AudioRecordingManager>>()
                         .map_or(false, |a| a.is_recording());
                     if is_recording {
+                        manager_cloned.touch_activity();
+                        continue;
+                    }
+
+                    // Wake listening must answer immediately after the wake
+                    // phrase — keep the ASR model warm while it is active
+                    // (plan step 12: ARMED → no unload; OFF → normal timeout).
+                    let wake_listening = app_handle_cloned
+                        .try_state::<Arc<crate::managers::wake::WakeManager>>()
+                        .map_or(false, |w| w.is_listening());
+                    if wake_listening {
                         manager_cloned.touch_activity();
                         continue;
                     }
@@ -274,7 +290,12 @@ impl TranscriptionManager {
     /// Unloads the model immediately if the setting is enabled and the model is loaded
     pub fn maybe_unload_immediately(&self, context: &str) {
         let settings = get_settings(&self.app_handle);
+        let wake_listening = self
+            .app_handle
+            .try_state::<Arc<crate::managers::wake::WakeManager>>()
+            .map_or(false, |w| w.is_listening());
         if settings.model_unload_timeout == ModelUnloadTimeout::Immediately
+            && !wake_listening
             && self.is_model_loaded()
         {
             info!("Immediately unloading model after {}", context);
@@ -410,6 +431,16 @@ impl TranscriptionManager {
                     anyhow::anyhow!(error_msg)
                 })?;
                 LoadedEngine::Cohere(engine)
+            }
+            EngineType::Qwen => {
+                let device = get_settings(&self.app_handle).qwen_device;
+                let sidecar =
+                    load_qwen_engine(&self.app_handle, &model_path, device).map_err(|e| {
+                        let error_msg = format!("Failed to load Qwen model {}: {}", model_id, e);
+                        emit_loading_failed(&error_msg);
+                        anyhow::anyhow!(error_msg)
+                    })?;
+                LoadedEngine::Qwen(sidecar)
             }
         };
 
@@ -748,6 +779,22 @@ impl TranscriptionManager {
                                 .transcribe(&audio, &options)
                                 .map_err(|e| anyhow::anyhow!("Cohere transcription failed: {}", e))
                         }
+                        LoadedEngine::Qwen(qwen_engine) => {
+                            let text = qwen_engine
+                                .transcribe(&audio, &validated_language)
+                                .map_err(|e| anyhow::anyhow!("Qwen transcription failed: {}", e))?;
+                            // Qwen returns plain text; expose one fabricated
+                            // segment spanning the clip (OpenWhisper parity).
+                            let duration = audio.len() as f32 / 16000.0;
+                            Ok(transcribe_rs::TranscriptionResult {
+                                text: text.clone(),
+                                segments: Some(vec![transcribe_rs::TranscriptionSegment {
+                                    start: 0.0,
+                                    end: duration,
+                                    text,
+                                }]),
+                            })
+                        }
                     }
                 },
             ));
@@ -890,6 +937,21 @@ impl TranscriptionManager {
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
         Ok(self.transcribe_detailed(audio)?.text)
     }
+}
+
+/// Spin up the Qwen sidecar worker and load the model from `model_path`.
+fn load_qwen_engine(
+    app: &AppHandle,
+    model_path: &Path,
+    device_setting: QwenDeviceSetting,
+) -> Result<QwenSidecar> {
+    let device = crate::managers::qwen_sidecar::resolve_device(device_setting);
+    let python = qwen_runtime::python_executable(app)?;
+    let worker = QwenSidecar::materialize_worker(app)?;
+    let mut sidecar = QwenSidecar::spawn(&python, &worker)?;
+    info!("Loading Qwen model from {:?} on {}", model_path, device);
+    sidecar.load(model_path, &device)?;
+    Ok(sidecar)
 }
 
 /// Apply the user's accelerator preferences to the transcribe-rs global atomics.

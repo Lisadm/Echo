@@ -24,6 +24,17 @@ enum Cmd {
     Stop(mpsc::Sender<Vec<f32>>),
     Peek(mpsc::Sender<Vec<f32>>),
     Shutdown,
+    /// Attach/detach the wake-listening consumer that receives 30 ms VAD
+    /// frames while no dictation recording is active.
+    SetWakeListener(Option<mpsc::Sender<WakeAudioFrame>>),
+}
+
+/// A 30 ms VAD frame forwarded to the wake-listening consumer while the
+/// recorder is open but not capturing a dictation recording.
+#[derive(Debug, Clone)]
+pub enum WakeAudioFrame {
+    Speech(Vec<f32>),
+    Silence,
 }
 
 enum AudioChunk {
@@ -160,7 +171,15 @@ impl AudioRecorder {
                 Ok((stream, sample_rate)) => {
                     let _ = init_tx.send(Ok(()));
                     // Keep the stream alive while we process samples.
-                    run_consumer(sample_rate, vad, sample_rx, cmd_rx, level_cb, stop_flag);
+                    run_consumer(
+                        sample_rate,
+                        vad,
+                        sample_rx,
+                        cmd_rx,
+                        level_cb,
+                        stop_flag,
+                        None,
+                    );
                     drop(stream);
                 }
                 Err(error_message) => {
@@ -217,6 +236,15 @@ impl AudioRecorder {
             tx.send(Cmd::Peek(resp_tx))?;
         }
         Ok(resp_rx.recv()?)
+    }
+
+    /// Attach or detach the wake-listening VAD consumer. While attached, the
+    /// consumer receives 30 ms speech/silence frames even when this recorder
+    /// is not capturing a dictation recording (requires the stream to be open).
+    pub fn set_wake_listener(&self, tx: Option<mpsc::Sender<WakeAudioFrame>>) {
+        if let Some(cmd_tx) = &self.cmd_tx {
+            let _ = cmd_tx.send(Cmd::SetWakeListener(tx));
+        }
     }
 
     pub fn close(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -401,6 +429,7 @@ mod tests {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_consumer(
     in_sample_rate: u32,
     vad: Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
@@ -408,6 +437,7 @@ fn run_consumer(
     cmd_rx: mpsc::Receiver<Cmd>,
     level_cb: Option<Arc<dyn Fn(Vec<f32>) + Send + Sync + 'static>>,
     stop_flag: Arc<AtomicBool>,
+    mut wake_tx: Option<mpsc::Sender<WakeAudioFrame>>,
 ) {
     let mut frame_resampler = FrameResampler::new(
         in_sample_rate as usize,
@@ -433,19 +463,35 @@ fn run_consumer(
         samples: &[f32],
         recording: bool,
         vad: &Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
+        wake_tx: &Option<mpsc::Sender<WakeAudioFrame>>,
         out_buf: &mut Vec<f32>,
     ) {
-        if !recording {
+        let wake_active = wake_tx.is_some();
+        if !recording && !wake_active {
             return;
         }
 
         if let Some(vad_arc) = vad {
             let mut det = vad_arc.lock().unwrap();
             match det.push_frame(samples).unwrap_or(VadFrame::Speech(samples)) {
-                VadFrame::Speech(buf) => out_buf.extend_from_slice(buf),
-                VadFrame::Noise => {}
+                VadFrame::Speech(buf) => {
+                    if recording {
+                        out_buf.extend_from_slice(buf);
+                    }
+                    if wake_active {
+                        let _ = wake_tx
+                            .as_ref()
+                            .unwrap()
+                            .send(WakeAudioFrame::Speech(buf.to_vec()));
+                    }
+                }
+                VadFrame::Noise => {
+                    if wake_active {
+                        let _ = wake_tx.as_ref().unwrap().send(WakeAudioFrame::Silence);
+                    }
+                }
             }
-        } else {
+        } else if recording {
             out_buf.extend_from_slice(samples);
         }
     }
@@ -470,7 +516,7 @@ fn run_consumer(
 
         // ---------- existing pipeline ------------------------------------ //
         frame_resampler.push(&raw, &mut |frame: &[f32]| {
-            handle_frame(frame, recording, &vad, &mut processed_samples)
+            handle_frame(frame, recording, &vad, &wake_tx, &mut processed_samples)
         });
 
         // non-blocking check for a command
@@ -497,7 +543,13 @@ fn run_consumer(
                         match sample_rx.recv_timeout(Duration::from_secs(2)) {
                             Ok(AudioChunk::Samples(remaining)) => {
                                 frame_resampler.push(&remaining, &mut |frame: &[f32]| {
-                                    handle_frame(frame, true, &vad, &mut processed_samples)
+                                    handle_frame(
+                                        frame,
+                                        true,
+                                        &vad,
+                                        &wake_tx,
+                                        &mut processed_samples,
+                                    )
                                 });
                             }
                             Ok(AudioChunk::EndOfStream) => break,
@@ -509,7 +561,7 @@ fn run_consumer(
                     }
 
                     frame_resampler.finish(&mut |frame: &[f32]| {
-                        handle_frame(frame, true, &vad, &mut processed_samples)
+                        handle_frame(frame, true, &vad, &wake_tx, &mut processed_samples)
                     });
 
                     let _ = reply_tx.send(std::mem::take(&mut processed_samples));
@@ -520,6 +572,13 @@ fn run_consumer(
                 }
                 Cmd::Peek(reply_tx) => {
                     let _ = reply_tx.send(processed_samples.clone());
+                }
+                Cmd::SetWakeListener(tx) => {
+                    wake_tx = tx;
+                    // Fresh VAD state for a new listening session.
+                    if let Some(v) = &vad {
+                        v.lock().unwrap().reset();
+                    }
                 }
                 Cmd::Shutdown => {
                     stop_flag.store(true, Ordering::Relaxed);

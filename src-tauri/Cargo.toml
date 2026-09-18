@@ -80,6 +80,7 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 tar = "0.4.44"
 flate2 = "1.0"
 sha2 = "0.10"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
 transcribe-rs = { version = "0.3.8", features = ["whisper-cpp", "onnx"] }
 handy-keys = "0.2.4"
 ferrous-opencc = "0.2.3"

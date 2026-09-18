@@ -138,6 +138,24 @@
   opacity: 0.7;
 }
 
+/* Wake listening: calm steady glow while waiting for the wake phrase. */
+.state-armed .orb-core {
+  background: oklch(75% 0.12 160 / 0.6);
+}
+
+/* Wake listening heard speech: same as working. */
+.state-wake-listening .orb-core {
+  width: 10px;
+  height: 10px;
+  background: oklch(68% 0.16 30 / 0.75);
+}
+
+/* Wake word heard: brighter core, breathing faster — speak your command. */
+.state-wake-activated .orb-core {
+  animation: orb-breathe 1s ease-in-out infinite;
+  background: oklch(80% 0.17 145 / 0.9);
+}
+
 /* Working states: smaller, steady core behind the spinner. */
 .state-transcribing .orb-core,
 .state-processing .orb-core {

@@ -125,6 +125,8 @@ def transcribe(engine, request):
     code = None if language == "auto" else language
     if code in ("en", "en-US"):
         code = "English"
+    else:
+        code = ISO_TO_NAME.get(code, code)
     text = engine.transcribe(
         audio=(np.asarray(samples, dtype=np.float32), 16000), language=code
     )[0].text
@@ -132,6 +134,44 @@ def transcribe(engine, request):
         text=text,
         segments=[dict(text=text, start=0.0, end=len(samples) / 16000)] if text else [],
     )
+
+
+# qwen-asr expects full English language names, not ISO codes. The Rust side
+# applies the same mapping; duplicated here so the worker is self-contained.
+ISO_TO_NAME = {
+    "zh": "Chinese",
+    "zh-Hans": "Chinese",
+    "zh-Hant": "Chinese",
+    "yue": "Cantonese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "da": "Danish",
+    "no": "Norwegian",
+    "nb": "Norwegian",
+    "fi": "Finnish",
+    "el": "Greek",
+    "cs": "Czech",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "ar": "Arabic",
+    "ru": "Russian",
+    "tr": "Turkish",
+    "hi": "Hindi",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "th": "Thai",
+    "ms": "Malay",
+    "uk": "Ukrainian",
+    "he": "Hebrew",
+}
 
 
 if __name__ == "__main__":

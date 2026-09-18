@@ -1,8 +1,8 @@
 {
-  "version": "2026-09-04.1",
+  "version": "2026-09-18.1",
   "component_api": 1,
   "platform": "win_amd64",
-  "install_bytes": 5383391386,
+  "install_bytes": 6124113366,
   "archives": [
     {
       "name": "python-3.12.10-embed-amd64.zip",
@@ -12,10 +12,10 @@
       "extract": "zip"
     },
     {
-      "name": "torch-2.6.0+cu124-cp312-cp312-win_amd64.whl",
-      "url": "https://download.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-win_amd64.whl",
-      "sha256": "3313061c1fec4c7310cf47944e84513dcd27b6173b72a349bb7ca68d0ee6e9c0",
-      "size_bytes": 2532302369,
+      "name": "torch-2.7.1+cu128-cp312-cp312-win_amd64.whl",
+      "url": "https://download.pytorch.org/whl/cu128/torch-2.7.1%2Bcu128-cp312-cp312-win_amd64.whl",
+      "sha256": "2bb8c05d48ba815b316879a18195d53a6472a03e297d971e916753f8e1053d30",
+      "size_bytes": 3273024349,
       "extract": "zip"
     },
     {

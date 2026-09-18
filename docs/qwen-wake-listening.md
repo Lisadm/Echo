@@ -11,7 +11,7 @@ top of it.
 Qwen3-ASR models (0.6B and 1.7B). Unlike the existing engines (Whisper,
 Parakeet, GigaAM) which run natively in Rust, Qwen runs the official
 [`qwen-asr`](https://github.com/QwenLM/Qwen3-ASR) package (`Qwen3ASRModel`)
-inside an isolated embedded Python 3.12 + PyTorch 2.6.0+cu124 runtime. The
+inside an isolated embedded Python 3.12 + PyTorch 2.7.1+cu128 runtime. The
 runtime is installed as a component into `<app data>/qwen-runtime`
 (~2.8 GB download, ~5.4 GB installed) and the weights are downloaded per-file
 from Hugging Face into `<app data>/models/qwen-0.6b|qwen-1.7b`. Both the runtime
@@ -54,7 +54,7 @@ can never corrupt the JSON channel.
       ▼
 ┌──────────── Python worker (embedded 3.12) ──────────────────────┐
 │  qwen-asr (Qwen3ASRModel)                                       │
-│    └─ PyTorch 2.6.0+cu124  ──► CUDA (NVIDIA GPU) or CPU         │
+│    └─ PyTorch 2.7.1+cu128  ──► CUDA (NVIDIA GPU) or CPU         │
 │  runtime installed at <app data>/qwen-runtime                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -133,7 +133,7 @@ weights or binaries.
 The pinned wheel manifest is carried over from OpenWhisper
 (`services/local_asr/qwen_runtime.json`) and lives at
 `src-tauri/src/managers/qwen_runtime.json`: 94 archives (embedded Python
-3.12.10, PyTorch 2.6.0+cu124, CUDA libraries, `qwen-asr`, …), every one pinned
+3.12.10, PyTorch 2.7.1+cu128, CUDA libraries, `qwen-asr`, …), every one pinned
 by URL + SHA256.
 
 **Models** (`<app data>/models/qwen-0.6b|qwen-1.7b`). Downloaded per-file from

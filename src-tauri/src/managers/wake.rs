@@ -112,6 +112,16 @@ fn run(app: AppHandle, tx: Sender<LoopMsg>, rx: Receiver<LoopMsg>, listening: Ar
                     listening.store(true, Ordering::SeqCst);
                     generation += 1;
                     let effects = m.handle(WakeEvent::ToggleOn);
+                    // Pre-warm: load the selected ASR model now so the first
+                    // command doesn't pay an ~8 s CUDA load (plan step 12).
+                    {
+                        let app_clone = app.clone();
+                        thread::spawn(move || {
+                            app_clone
+                                .state::<Arc<TranscriptionManager>>()
+                                .initiate_model_load();
+                        });
+                    }
                     for effect in effects {
                         execute_effect(
                             &app,
@@ -335,6 +345,10 @@ fn execute_effect(
             thread::spawn(move || {
                 let started = Instant::now();
                 let tm = app.state::<Arc<TranscriptionManager>>();
+                // If the model isn't loaded (e.g. the app restarted while
+                // always-listening was armed), kick off the load; transcribe
+                // then waits on the loading condvar instead of failing fast.
+                tm.initiate_model_load();
                 let result = tm.transcribe(samples).map_err(|e| e.to_string());
                 info!("Wake ASR finished in {:?}", started.elapsed());
                 let _ = tx.send(LoopMsg::Transcript { generation, result });

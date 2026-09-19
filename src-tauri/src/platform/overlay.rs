@@ -329,6 +329,12 @@ pub fn show_overlay_state(app_handle: &AppHandle, state: &str) {
     update_overlay_position(app_handle);
 
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
+        // Wake-listening states are persistent indicators (plan step 13): make
+        // them click-through so the always-visible orb never blocks the apps
+        // underneath. Dictation states keep the clickable cancel orb.
+        let wake_state = matches!(state, "armed" | "wake-listening" | "wake-activated");
+        let _ = overlay_window.set_ignore_cursor_events(wake_state);
+
         let _ = overlay_window.show();
 
         // On Windows, aggressively re-assert "topmost" in the native Z-order after showing
@@ -381,6 +387,8 @@ pub fn hide_recording_overlay(app_handle: &AppHandle) {
     // Always hide the overlay regardless of settings - if setting was changed while recording,
     // we still want to hide it properly
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
+        // Reset click-through so a later dictation orb is clickable again.
+        let _ = overlay_window.set_ignore_cursor_events(false);
         // Emit event to trigger fade-out animation
         let _ = overlay_window.emit("hide-overlay", ());
         // Hide the window after a short delay to allow animation to complete

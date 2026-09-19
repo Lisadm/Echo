@@ -141,13 +141,73 @@ fn find_best_match<'a>(
 ///
 /// # Returns
 /// The corrected text with custom words applied
+/// Splits a glossary entry into (canonical term, [aliases]).
+/// Syntax: "Qwen=квен,квин" — everything after '=' is a comma-separated list
+/// of spoken variants the ASR may produce for the term. A plain entry is its
+/// own alias.
+fn split_glossary_entry(entry: &str) -> (String, Vec<String>) {
+    match entry.split_once('=') {
+        Some((canonical, aliases)) => {
+            let canonical = canonical.trim().to_string();
+            let mut list: Vec<String> = aliases
+                .split(',')
+                .map(|a| a.trim().to_string())
+                .filter(|a| !a.is_empty())
+                .collect();
+            list.push(canonical.clone());
+            (canonical, list)
+        }
+        None => (entry.to_string(), vec![entry.to_string()]),
+    }
+}
+
+/// Normalizes a token for alias comparison: lowercase, ё→е, edge punctuation off.
+fn normalize_alias_token(token: &str) -> String {
+    token
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_lowercase()
+        .replace('ё', "е")
+}
+
+/// Strips the "=alias,alias" suffix from glossary entries
+/// ("Qwen=квен,квин" → "Qwen"). Use when entries are rendered as a plain list
+/// (Whisper initial prompt, Qwen context) so aliases don't leak into prompts.
+pub fn canonical_glossary_terms(custom_words: &[String]) -> Vec<String> {
+    custom_words
+        .iter()
+        .map(|entry| match entry.split_once('=') {
+            Some((canonical, _)) => canonical.trim().to_string(),
+            None => entry.clone(),
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 pub fn apply_custom_words(text: &str, custom_words: &[String], threshold: f64) -> String {
     if custom_words.is_empty() {
         return text.to_string();
     }
 
+    // Alias map for deterministic, script-crossing replacements
+    // ("квин" → "Qwen"). Fuzzy matching below cannot bridge alphabets.
+    let alias_map: Vec<(String, String)> = custom_words
+        .iter()
+        .flat_map(|entry| {
+            let (canonical, aliases) = split_glossary_entry(entry);
+            aliases
+                .into_iter()
+                .map(move |a| (normalize_alias_token(&a), canonical.clone()))
+        })
+        .filter(|(alias, _)| !alias.is_empty())
+        .collect();
+
+    // The fuzzy pass operates on CANONICAL terms only — raw entries with the
+    // "=alias" suffix must never become fuzzy targets.
+    let canonical_terms = canonical_glossary_terms(custom_words);
+
     // Pre-compute lowercase versions to avoid repeated allocations
-    let custom_words_lower: Vec<String> = custom_words.iter().map(|w| w.to_lowercase()).collect();
+    let custom_words_lower: Vec<String> =
+        canonical_terms.iter().map(|w| w.to_lowercase()).collect();
 
     // Pre-compute versions with spaces removed for n-gram comparison
     let custom_words_nospace: Vec<String> = custom_words_lower
@@ -160,6 +220,29 @@ pub fn apply_custom_words(text: &str, custom_words: &[String], threshold: f64) -
     let mut i = 0;
 
     while i < words.len() {
+        // Exact alias match first (single token). Byte-safe: split on chars.
+        {
+            let chars: Vec<char> = words[i].chars().collect();
+            let start = chars.iter().take_while(|c| !c.is_alphanumeric()).count();
+            let end = chars.len() - chars.iter().rev().take_while(|c| !c.is_alphanumeric()).count();
+            if start < end {
+                let core: String = chars[start..end]
+                    .iter()
+                    .collect::<String>()
+                    .to_lowercase()
+                    .replace('ё', "е");
+                if let Some((_, canonical)) = alias_map.iter().find(|(a, _)| *a == core) {
+                    let lead: String = chars[..start].iter().collect();
+                    let tail: String = chars[end..].iter().collect();
+                    let original: String = chars[start..end].iter().collect();
+                    let corrected = preserve_case_pattern(&original, canonical);
+                    result.push(format!("{}{}{}", lead, corrected, tail));
+                    i += 1;
+                    continue;
+                }
+            }
+        }
+
         let mut matched = false;
 
         // Try n-grams from longest (3) to shortest (1) - greedy matching
@@ -172,7 +255,7 @@ pub fn apply_custom_words(text: &str, custom_words: &[String], threshold: f64) -
             let ngram = build_ngram(ngram_words);
 
             if let Some((replacement, _score)) =
-                find_best_match(&ngram, custom_words, &custom_words_nospace, threshold)
+                find_best_match(&ngram, &canonical_terms, &custom_words_nospace, threshold)
             {
                 // Extract punctuation from first and last words of the n-gram
                 let (prefix, _) = extract_punctuation(ngram_words[0]);
@@ -381,6 +464,36 @@ mod tests {
         let custom_words = vec!["hello".to_string(), "world".to_string()];
         let result = apply_custom_words(text, &custom_words, 0.5);
         assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_alias_exact_match_across_scripts() {
+        let words = vec!["Qwen=квен,квин,кван".to_string()];
+        assert_eq!(
+            apply_custom_words("подключим квин к системе", &words, 0.5),
+            "подключим Qwen к системе"
+        );
+        assert_eq!(apply_custom_words("Это Квин!", &words, 0.5), "Это Qwen!");
+        // ё/е normalization applies to aliases too
+        assert_eq!(apply_custom_words("наш квён тут", &words, 0.5), "наш Qwen тут");
+        // Interior deviation is NOT matched by the exact alias pass
+        assert_eq!(
+            apply_custom_words("случайный словомарик", &words, 0.5),
+            "случайный словомарик"
+        );
+    }
+
+    #[test]
+    fn test_canonical_glossary_terms_strips_aliases() {
+        let words = vec![
+            "Qwen=квен,квин".to_string(),
+            "GitHub".to_string(),
+            "pull request=пол ресюст".to_string(),
+        ];
+        assert_eq!(
+            canonical_glossary_terms(&words),
+            vec!["Qwen".to_string(), "GitHub".to_string(), "pull request".to_string()]
+        );
     }
 
     #[test]

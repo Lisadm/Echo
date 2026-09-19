@@ -651,7 +651,10 @@ impl TranscriptionManager {
                                 }
                                 let glossary = settings.effective_custom_words();
                                 if !glossary.is_empty() {
-                                    parts.push(glossary.join(", "));
+                                    parts.push(
+                                        crate::audio_toolkit::canonical_glossary_terms(&glossary)
+                                            .join(", "),
+                                    );
                                 }
                                 if parts.is_empty() {
                                     None
@@ -791,7 +794,8 @@ impl TranscriptionManager {
                             } else {
                                 Some(format!(
                                     "Термины и названия продуктов, которые могут встретиться: {}",
-                                    glossary.join(", ")
+                                    crate::audio_toolkit::canonical_glossary_terms(&glossary)
+                                        .join(", ")
                                 ))
                             };
                             let text = qwen_engine

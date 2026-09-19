@@ -82,7 +82,21 @@ impl WakeDetector for AsrPrefixWakeDetector {
             if p_tokens.is_empty() || norm_tokens.len() < p_tokens.len() {
                 continue;
             }
-            if norm_tokens[..p_tokens.len()] == p_tokens[..] {
+            // Narrow tolerance for single-token phrases (observed Qwen artifact:
+            // it renders "Эхо" as "Эху" — a trailing-vowel flexion). A match is
+            // accepted when the token differs from the phrase ONLY in its last
+            // character ("эху" ✓, "ходу"/"эго" ✗). Multi-token phrases stay exact.
+            let matched = if p_tokens.len() == 1 && norm_tokens[0].chars().count() >= 3 {
+                let spoken: Vec<char> = norm_tokens[0].chars().collect();
+                let phrase_chars: Vec<char> = p_tokens[0].chars().collect();
+                norm_tokens[0] == p_tokens[0]
+                    || (spoken.len() == phrase_chars.len()
+                        && spoken[..spoken.len() - 1] == phrase_chars[..phrase_chars.len() - 1]
+                        && spoken[spoken.len() - 1] != phrase_chars[phrase_chars.len() - 1])
+            } else {
+                norm_tokens[..p_tokens.len()] == p_tokens[..]
+            };
+            if matched {
                 let payload = raw_tokens[p_tokens.len()..]
                     .join(" ")
                     .trim_start_matches(|c: char| " ,.:;-!—…\"'".contains(c))
@@ -384,6 +398,22 @@ mod tests {
                 payload: "запусти сборку".to_string()
             }
         );
+    }
+
+    #[test]
+    fn detector_accepts_last_char_deviation_for_single_token_phrase() {
+        let d = AsrPrefixWakeDetector::new("эхо", &[]);
+        // Qwen's flexion artifact: "Эху" instead of "Эхо"
+        assert_eq!(
+            d.detect("Эху, один раз работал"),
+            WakeResult::Command { payload: "один раз работал".to_string() }
+        );
+        // Same length but a DIFFERENT interior character: not tolerated
+        assert_eq!(d.detect("эго, привет"), WakeResult::NoMatch);
+        assert_eq!(d.detect("ходу давай протестируем"), WakeResult::NoMatch);
+        // Short tokens never tolerated
+        let d2 = AsrPrefixWakeDetector::new("эх", &[]);
+        assert_eq!(d2.detect("эху, привет"), WakeResult::NoMatch);
     }
 
     #[test]

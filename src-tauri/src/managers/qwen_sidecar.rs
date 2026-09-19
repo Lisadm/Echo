@@ -155,7 +155,12 @@ impl QwenSidecar {
     /// Transcribe 16 kHz mono f32 samples. Writes a temp raw-PCM file, sends a
     /// `transcribe` request, returns the recognized text. Respawns the worker
     /// once if the previous process died (e.g. after a timeout kill).
-    pub fn transcribe(&mut self, audio: &[f32], language: &str) -> Result<String> {
+    pub fn transcribe(
+        &mut self,
+        audio: &[f32],
+        language: &str,
+        context: Option<&str>,
+    ) -> Result<String> {
         if !self.is_alive() {
             warn!("Qwen worker is not running; respawning");
             self.respawn()?;
@@ -167,6 +172,7 @@ impl QwenSidecar {
             json!({
                 "audio_path": temp_path.to_string_lossy(),
                 "language": map_language(language),
+                "context": context.unwrap_or(""),
             }),
             REQUEST_TIMEOUT,
         );

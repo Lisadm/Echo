@@ -127,9 +127,18 @@ def transcribe(engine, request):
         code = "English"
     else:
         code = ISO_TO_NAME.get(code, code)
+    # Optional glossary/bias context — goes into the chat system message
+    # (qwen-asr: context: Union[str, List[str]] = "").
+    context = request.get("context") or ""
     text = engine.transcribe(
-        audio=(np.asarray(samples, dtype=np.float32), 16000), language=code
+        audio=(np.asarray(samples, dtype=np.float32), 16000),
+        language=code,
+        context=context,
     )[0].text
+    # Guard: on silence/noise the model may echo the context instruction back
+    # instead of transcribing. Output repeating the context is empty output.
+    if context and text.strip().startswith(context[:20]):
+        text = ""
     return dict(
         text=text,
         segments=[dict(text=text, start=0.0, end=len(samples) / 16000)] if text else [],

@@ -780,8 +780,26 @@ impl TranscriptionManager {
                                 .map_err(|e| anyhow::anyhow!("Cohere transcription failed: {}", e))
                         }
                         LoadedEngine::Qwen(qwen_engine) => {
+                            // Glossary → qwen-asr context (system message):
+                            // the model writes the listed terms in Latin
+                            // script natively, which post-hoc fuzzy
+                            // correction cannot do across scripts
+                            // ("гитхаб" → "GitHub").
+                            let glossary = settings.effective_custom_words();
+                            let qwen_context = if glossary.is_empty() {
+                                None
+                            } else {
+                                Some(format!(
+                                    "Термины и названия продуктов, которые могут встретиться: {}",
+                                    glossary.join(", ")
+                                ))
+                            };
                             let text = qwen_engine
-                                .transcribe(&audio, &validated_language)
+                                .transcribe(
+                                    &audio,
+                                    &validated_language,
+                                    qwen_context.as_deref(),
+                                )
                                 .map_err(|e| anyhow::anyhow!("Qwen transcription failed: {}", e))?;
                             // Qwen returns plain text; expose one fabricated
                             // segment spanning the clip (OpenWhisper parity).

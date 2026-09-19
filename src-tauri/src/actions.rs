@@ -873,12 +873,18 @@ impl ShortcutAction for TranscribeAction {
                                     .await;
 
                             // Emit the processed text as a subtitle update for the overlay
-                            // (trimmed to the configured on-screen length).
-                            let sub_max = get_settings(&ah).subtitle_max_chars.max(20) as usize;
-                            let _ = ah.emit(
-                                "subtitle-update",
-                                tail_chars(&processed.final_text, sub_max),
-                            );
+                            // (trimmed to the configured on-screen length). Only when the
+                            // subtitle overlay is enabled — the overlay window is visible
+                            // during transcribing, and an unconditional emit flashes the
+                            // full recognized text for a moment right before the paste.
+                            if get_settings(&ah).subtitle_overlay {
+                                let sub_max =
+                                    get_settings(&ah).subtitle_max_chars.max(20) as usize;
+                                let _ = ah.emit(
+                                    "subtitle-update",
+                                    tail_chars(&processed.final_text, sub_max),
+                                );
+                            }
 
                             // Save to history if WAV was saved
                             if wav_saved {

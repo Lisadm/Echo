@@ -56,7 +56,15 @@ const RecordingOverlay: React.FC = () => {
         const overlayState = event.payload as OverlayState;
         setState(overlayState);
         setIsVisible(true);
-        if (overlayState === "recording" || overlayState === "preparing") {
+        if (
+          overlayState === "recording" ||
+          overlayState === "preparing" ||
+          // Wake states are persistent indicators: never show stale subtitle
+          // text from a previous dictation alongside them.
+          overlayState === "armed" ||
+          overlayState === "wake-listening" ||
+          overlayState === "wake-activated"
+        ) {
           setSubtitles("");
         }
       });

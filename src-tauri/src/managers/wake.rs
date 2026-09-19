@@ -162,6 +162,11 @@ fn run(app: AppHandle, tx: Sender<LoopMsg>, rx: Receiver<LoopMsg>, listening: Ar
                             in_speech = true;
                             silence_frames = 0;
                             utterance.clear();
+                            // The FIRST speech frame carries the VAD prefill
+                            // (~450 ms) with the onset of the wake word — it
+                            // must enter the buffer or "Эхо…" gets truncated
+                            // to "хо…" and never matches.
+                            utterance.extend_from_slice(&samples);
                             m.handle(WakeEvent::SpeechStarted)
                         } else {
                             utterance.extend_from_slice(&samples);
